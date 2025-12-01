@@ -8,6 +8,12 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Load D3.js v7 library -->
   <script src="https://d3js.org/d3.v7.min.js"></script>
+
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  
   <style>
     /* Custom styling for the tree container */
     #tree-container { 
@@ -70,6 +76,12 @@
              class="inline-flex items-center px-4 py-2 text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 transition duration-150">
               + Request New Member Addition
           </a>
+
+          <button id="downloadPdfButton" 
+                  class="inline-flex items-center px-4 py-2 text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 transition duration-150" 
+                  onclick="downloadTreeAsPdf()">
+              Download Tree (PDF)
+          </button>
           
           <!-- Admin Controls Group -->
           <div id="adminControls" class="flex items-center space-x-2">
@@ -228,6 +240,74 @@
 
   <!-- Firebase and D3 Logic -->
   <script type="module">
+    // --- PDF DOWNLOAD FUNCTION ---
+    window.downloadTreeAsPdf = async function() {
+        // Find the main container that holds the tree (including the SVG)
+        const input = document.getElementById('tree-container');
+        
+        // Temporarily adjust the tree-container height if needed to capture the full tree height
+        // This is crucial if the tree extends past the 90vh setting.
+        const originalHeight = input.style.height;
+        // We set the container height to the *scroll* height to ensure we capture the whole drawing.
+        input.style.height = `${input.scrollHeight}px`; 
+
+        // Temporarily hide fixed/floating elements (like the layout button) for a clean capture
+        const layoutControls = document.getElementById('layout-controls');
+        layoutControls.style.display = 'none';
+
+        try {
+            // 1. Capture the content as a canvas image
+            const canvas = await html2canvas(input, {
+                // Ignore the controls/header above the tree
+                ignoreElements: (element) => element.id === 'controls', 
+                scale: 2, // Use a higher scale for better resolution
+            });
+
+            // 2. Initialize jsPDF
+            const { jsPDF } = window.jspdf;
+            const pdf = new jsPDF('l', 'mm', 'a4'); // 'l' for landscape, 'mm' for units, 'a4' for size
+
+            const imgData = canvas.toDataURL('image/jpeg', 1.0);
+            const imgWidth = 297; // A4 landscape width in mm
+            const imgHeight = (canvas.height * imgWidth) / canvas.width;
+            let position = 0;
+            
+            // Check if content fits on one page (adjusting to imgHeight)
+            const pageHeight = 210; // A4 landscape height in mm
+            const margin = 10;
+            const contentHeight = imgHeight;
+
+            if (contentHeight > pageHeight) {
+                // Multi-page export logic
+                let heightLeft = contentHeight;
+                while (heightLeft > 0) {
+                    pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
+                    heightLeft -= pageHeight;
+                    position -= pageHeight;
+                    
+                    if (heightLeft > 0) {
+                        pdf.addPage();
+                    }
+                }
+            } else {
+                // Single-page export
+                pdf.addImage(imgData, 'JPEG', margin, margin, imgWidth - 2 * margin, imgHeight - 2 * margin);
+            }
+
+
+            // 3. Download the PDF
+            const date = new Date().toISOString().slice(0, 10);
+            pdf.save(`family_tree_${date}.pdf`);
+
+        } catch (error) {
+            console.error("Error generating PDF:", error);
+            alert("Error generating PDF. Check the console for details.");
+        } finally {
+            // 4. Restore original styles
+            input.style.height = originalHeight; 
+            layoutControls.style.display = 'block';
+        }
+
     // --- FIREBASE IMPORTS ---
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
     import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut, updatePassword, EmailAuthProvider, reauthenticateWithCredential } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
